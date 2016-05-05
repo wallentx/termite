@@ -20,6 +20,7 @@
 #include <array>
 #include <cstdlib>
 #include <cstring>
+#include <cmath>
 #include <functional>
 #include <limits>
 #include <map>
@@ -508,7 +509,7 @@ static void update_scroll(VteTerminal *vte) {
     long cursor_row;
     vte_terminal_get_cursor_position(vte, nullptr, &cursor_row);
 
-    if (cursor_row < scroll_row) {
+    if ( (double)cursor_row < scroll_row) {
         gtk_adjustment_set_value(adjust, (double)cursor_row);
     } else if (cursor_row - n_rows >= (long)scroll_row) {
         gtk_adjustment_set_value(adjust, (double)(cursor_row - n_rows + 1));
@@ -1312,6 +1313,9 @@ static void load_theme(GtkWindow *window, VteTerminal *vte, GKeyFile *config, hi
         if(color->alpha != 1){
             *has_alpha = TRUE;
         }
+    }
+    if (auto color = get_config_color(config, "colors", "cursor_foreground")) {
+        vte_terminal_set_color_cursor_foreground(vte, &*color);
     }
     if (auto color = get_config_color(config, "colors", "highlight")) {
         vte_terminal_set_color_highlight(vte, &*color);
