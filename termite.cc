@@ -168,8 +168,10 @@ static std::function<void ()> reload_config;
 static void override_background_color(GtkWidget *widget, GdkRGBA *rgba) {
     GtkCssProvider *provider = gtk_css_provider_new();
 
-    char *css = g_strdup_printf("* { background-color: %s; }", gdk_rgba_to_string(rgba));
+    gchar *colorstr = gdk_rgba_to_string(rgba);
+    char *css = g_strdup_printf("* { background-color: %s; }", colorstr);
     gtk_css_provider_load_from_data(provider, css, -1, nullptr);
+    g_free(colorstr);
     g_free(css);
 
     gtk_style_context_add_provider(gtk_widget_get_style_context(widget),
@@ -843,6 +845,7 @@ gboolean key_press_cb(VteTerminal *vte, GdkEventKey *event, keybind_info *info) 
                 move_forward_blank_word(vte, &info->select);
                 break;
             case GDK_KEY_0:
+            case GDK_KEY_Home:
                 set_cursor_column(vte, &info->select, 0);
                 break;
             case GDK_KEY_asciicircum:
@@ -850,6 +853,7 @@ gboolean key_press_cb(VteTerminal *vte, GdkEventKey *event, keybind_info *info) 
                 move_first(vte, &info->select, std::not1(std::ref(g_unichar_isspace)));
                 break;
             case GDK_KEY_dollar:
+            case GDK_KEY_End:
                 move_to_eol(vte, &info->select);
                 break;
             case GDK_KEY_g:
