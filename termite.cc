@@ -158,9 +158,9 @@ static void overlay_show(search_panel_info *info, overlay_mode mode, VteTerminal
 static void get_vte_padding(VteTerminal *vte, int *left, int *top, int *right, int *bottom);
 static char *check_match(VteTerminal *vte, GdkEventButton *event);
 static void load_config(GtkWindow *window, VteTerminal *vte, config_info *info,
-                        char **geometry, gboolean *has_alpha);
+                        char **geometry, char **icon, gboolean *has_alpha);
 static void set_config(GtkWindow *window, VteTerminal *vte, config_info *info,
-                        char **geometry, GKeyFile *config, gboolean *has_alpha);
+                        char **geometry, char **icon, GKeyFile *config, gboolean *has_alpha);
 static long first_row(VteTerminal *vte);
 
 static std::function<void ()> reload_config;
@@ -524,12 +524,16 @@ static void move(VteTerminal *vte, select_info *select, long col, long row) {
     long cursor_col, cursor_row;
     vte_terminal_get_cursor_position(vte, &cursor_col, &cursor_row);
 
+    VteCursorBlinkMode mode = vte_terminal_get_cursor_blink_mode(vte);
+    vte_terminal_set_cursor_blink_mode(vte, VTE_CURSOR_BLINK_OFF);
+
     vte_terminal_set_cursor_position(vte,
                                      clamp(cursor_col + col, 0l, end_col),
                                      clamp(cursor_row + row, first_row(vte), last_row(vte)));
 
     update_scroll(vte);
     update_selection(vte, select);
+    vte_terminal_set_cursor_blink_mode(vte, mode);
 }
 
 static void move_to_row_start(VteTerminal *vte, select_info *select, long row) {
@@ -1367,7 +1371,7 @@ static void load_theme(GtkWindow *window, VteTerminal *vte, GKeyFile *config, hi
 }
 
 static void load_config(GtkWindow *window, VteTerminal *vte, config_info *info,
-                        char **geometry, gboolean *has_alpha) {
+                        char **geometry, char **icon, gboolean *has_alpha) {
     const std::string default_path = "/termite/config";
     GKeyFile *config = g_key_file_new();
 
@@ -1392,13 +1396,13 @@ static void load_config(GtkWindow *window, VteTerminal *vte, config_info *info,
     }
 
     if (loaded) {
-        set_config(window, vte, info, geometry, config, has_alpha);
+        set_config(window, vte, info, geometry, icon, config, has_alpha);
     }
     g_key_file_free(config);
 }
 
 static void set_config(GtkWindow *window, VteTerminal *vte, config_info *info,
-                        char **geometry, GKeyFile *config, gboolean *has_alpha) {
+                        char **geometry, char **icon, GKeyFile *config, gboolean *has_alpha) {
     if (geometry) {
         if (auto s = get_config_string(config, "options", "geometry")) {
             *geometry = *s;
@@ -1485,9 +1489,10 @@ static void set_config(GtkWindow *window, VteTerminal *vte, config_info *info,
         g_free(*s);
     }
 
-    if (auto s = get_config_string(config, "options", "icon_name")) {
-        gtk_window_set_icon_name(window, *s);
-        g_free(*s);
+    if (icon) {
+        if (auto s = get_config_string(config, "options", "icon_name")) {
+            *icon = *s;
+        }
     }
 
     if (info->size_hints) {
@@ -1535,7 +1540,7 @@ int main(int argc, char **argv) {
 
     GOptionContext *context = g_option_context_new(nullptr);
     char *role = nullptr, *geometry = nullptr, *execute = nullptr, *config_file = nullptr;
-    char *title = nullptr;
+    char *title = nullptr, *icon = nullptr;
     const GOptionEntry entries[] = {
         {"version", 'v', 0, G_OPTION_ARG_NONE, &version, "Version info", nullptr},
         {"exec", 'e', 0, G_OPTION_ARG_STRING, &execute, "Command to execute", "COMMAND"},
@@ -1545,6 +1550,7 @@ int main(int argc, char **argv) {
         {"geometry", 0, 0, G_OPTION_ARG_STRING, &geometry, "Window geometry", "GEOMETRY"},
         {"hold", 0, 0, G_OPTION_ARG_NONE, &hold, "Remain open after child process exits", nullptr},
         {"config", 'c', 0, G_OPTION_ARG_STRING, &config_file, "Path of config file", "CONFIG"},
+        {"icon", 'i', 0, G_OPTION_ARG_STRING, &icon, "Icon", "ICON"},
         {nullptr, 0, 0, G_OPTION_ARG_NONE, nullptr, nullptr, nullptr}
     };
     g_option_context_add_main_entries(context, entries, nullptr);
@@ -1614,10 +1620,11 @@ int main(int argc, char **argv) {
         gtk_window_fullscreen
     };
 
-    load_config(GTK_WINDOW(window), vte, &info.config, geometry ? nullptr : &geometry, &has_alpha);
+    load_config(GTK_WINDOW(window), vte, &info.config, geometry ? nullptr : &geometry,
+                icon ? nullptr : &icon, &has_alpha);
 
     reload_config = [&]{
-        load_config(GTK_WINDOW(window), vte, &info.config, nullptr, &has_alpha);
+        load_config(GTK_WINDOW(window), vte, &info.config, nullptr, nullptr, &has_alpha);
     };
     signal(SIGUSR1, [](int){ reload_config(); });
 
@@ -1682,6 +1689,11 @@ int main(int argc, char **argv) {
             g_printerr("invalid geometry string: %s\n", geometry);
         }
         g_free(geometry);
+    }
+
+    if (icon) {
+        gtk_window_set_icon_name(GTK_WINDOW(window), icon);
+        g_free(icon);
     }
 
     gtk_widget_grab_focus(vte_widget);
